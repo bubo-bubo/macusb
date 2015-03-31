@@ -37,39 +37,36 @@ pattern /dev/macusbN-X, where N and X are natural numbers.
 
 At any moment device node state is set to one of five states:
 
-  MACUSB_STATE_FREE            free, no IO in progress
-  MACUSB_STATE_SYNC_WRITE      sync TX in progress
-  MACUSB_STATE_SYNC_BUSY       sync TX done successfully
-  MACUSB_STATE_SYNC_READ       sync RX in progress
-  MACUSB_STATE_ASYNC_BUSY      executing request, completion flag loop is
+  - MACUSB_STATE_FREE            free, no IO in progress
+  - MACUSB_STATE_SYNC_WRITE      sync TX in progress
+  - MACUSB_STATE_SYNC_BUSY       sync TX done successfully
+  - MACUSB_STATE_SYNC_READ       sync RX in progress
+  - MACUSB_STATE_ASYNC_BUSY      executing request, completion flag loop is
                                running
-  MACUSB_STATE_ASYNC_MAC_TOUT  executing request, completion flag loop has
+  - MACUSB_STATE_ASYNC_MAC_TOUT  executing request, completion flag loop has
                                finished, waiting for RX URB completion
                                handler
-  MACUSB_STATE_ASYNC_URB_TOUT  RX URB completion handler timeout.
-                               The state is changed to:
-                                 * FREE by successful RX URB completion
-                                   handler,
-                                 * ERR by failed RX URB completion handler
-                                   or by ioctl(MACUSB_IOC_RQ_STOP)
-  MACUSB_STATE_CONF            configuration is in proggress
-  MACUSB_STATE_ERR             failed to execute request
-  MACUSB_STATE_END             end of device lifecycle
+  - MACUSB_STATE_ASYNC_URB_TOUT  RX URB completion handler timeout. The state is changed to:
+    * FREE by successful RX URB completion handler,
+    * ERR by failed RX URB completion handler or by ioctl(MACUSB_IOC_RQ_STOP)
+  - MACUSB_STATE_CONF            configuration is in proggress
+  - MACUSB_STATE_ERR             failed to execute request
+  - MACUSB_STATE_END             end of device lifecycle
 
 State change is synchronized with spin lock to allow some operations
 be run concurrently on SMP systems for the same device node.
 
 Example of asynchronous request:
-
-  const char *path = "/dev/macusb/macusb1-0";
+```C
+  const char *path = "/dev/macusb1-0";
   fd = open( path )
   if ( ioctl( fd, MACUSB_IOC_RQ_EOT, &cmd_buffer ) )
     perror( path );
   close( fd );
-
+```
 Example of synchronous request:
-
-  const char *path = "/dev/macusb/macusb1-0";
+```C
+  const char *path = "/dev/macusb1-0";
   fd = open( path )
   // send commands
   if ( (bytes=write( fd, &out_buffer, count )) < 0 )
@@ -78,7 +75,7 @@ Example of synchronous request:
   if ( (bytes=read( fd, &in_buffer, in_buffer_size )) < 0 )
     perror( path );
   close( fd );
-
+```
 NB: Atomicity of request execution is guaranteed, order of RX URBs is
     congruent to order of TX URBs for concurrent asynchronous AND
     synchronous requests always. The driver is thread-safe as of
