@@ -1,0 +1,38 @@
+2014-11-06  Alexey Filin
+
+	* Implement function `device_reset_ctl'
+	* Fix timeout in `usb_bulk_msg'
+	* Add conversion of RX prepacket in accordance with byte order of
+	the particular machine (device is supposed to be 16-bit little endian)
+
+	Version 1.0.2
+
+2014-10-21  Alexey Filin
+
+	* Make tx/rx buffers in `macusb_buffer_t' fixed size
+	* Add waiting for URB completion handler in device_rx to remove
+	the waiting from user space
+	* Add field `urb_tout' in `macusb_async_cfg_t'
+	* Add state URB_TOUT to notify about URB completion handler timeout
+	* Make STOP_RQ for bouth sync/async request types
+	* Replace all wait-for loops with one function wait_for_condition
+
+	Version 1.0.1
+
+2014-10-08  Alexey Filin
+
+	* Replace arg types in ioctl commands, add compat_ioctl to provide
+	compatibility of 32-bit apps with 64-bit driver
+	* Add setting mac_tout to zero in probe if device is not high speed
+	* Protect sysfs funcs with kref to remove race condition with delete
+
+	Version 0.2.1
+
+2014-09-24  Alexey Filin
+
+	* Add field `pipe' to `macusb_bulk_pipe_t' to replace flag
+	`is_sndbulkpipe' in some func arg lists
+	* Add `usb_clear_halt' to clear possible endpoint halt/stall condition
+
+	Version 0.1.1
+
