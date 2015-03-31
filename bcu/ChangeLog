@@ -1,0 +1,8 @@
+2014-11-06  Alexey Filin
+
+	* Add into `_exec_buf' conversion of TX data into local buffer and
+	conversion of RX data from local buffer in accordance with byte order
+	of the particular machine (device is supposed to be 16-bit little
+	endian)
+
+	Version 1.0.2

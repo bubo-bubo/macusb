@@ -1,0 +1,16 @@
+libbcu is a library to facilitate use of driver macusb
+
+
+to build library cd to directory src and run:
+  > make
+
+to generate python binding set environment (bash, zsh):
+  > source .rc
+and run:
+  > make py
+
+to install library cd to directory src and:
+  * set INSTDIR to required location in Makefile
+  * update rule 'inst:' in Makefile
+  * run:
+      > make install
