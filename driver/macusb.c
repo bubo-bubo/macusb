@@ -44,7 +44,9 @@ MODULE_VERSION( MACUSB_VERSION_STR );
 
 /* table of devices that work with this driver */
 static struct usb_device_id macusb_table [] = {
-	{ USB_DEVICE( MACUSB_VENDOR_ID, MACUSB_PRODUCT_ID ) },
+	{ USB_DEVICE( MACUSB_VENDOR_ID, MACUSB_PRODUCT_ID_LE99S ) },
+	{ USB_DEVICE( MACUSB_VENDOR_ID, MACUSB_PRODUCT_ID_LE98 ) },
+	{ USB_DEVICE( MACUSB_VENDOR_ID, MACUSB_PRODUCT_ID_EM11 ) },
 	{ }					/* Terminating entry */
 };
 MODULE_DEVICE_TABLE( usb, macusb_table );
@@ -53,7 +55,7 @@ MODULE_DEVICE_TABLE( usb, macusb_table );
 /*****************************************************************************/
 #define MACUSB_NAME_MAX_SIZE  256
 
-typedef u_int32_t( *mac_func_t )( volatile u_int8_t *, u_int32_t, u_int32_t, u_int32_t, macusb_buffer_t * );
+typedef uint32_t( *mac_func_t )( volatile uint8_t *, uint32_t, uint32_t, uint32_t, macusb_buffer_t * );
 
 struct macusb_bulk_pipe;
 
@@ -63,14 +65,14 @@ typedef struct macusb_urb_container {
   struct work_struct       work;  /* container for URB bottom half of
 				     completion handler */
   struct list_head         list;
-  //volatile u_int8_t       *buf;   /* data buffer */
+  //volatile uint8_t       *buf;   /* data buffer */
   struct urb              *urb;   /* pointer to URB */
   struct macusb_bulk_pipe *pipe;  /* pointer to URB pipe */
   struct macusb_buffer    *last_rq_buf; /* pointer to last request buffer if
 					   not zero, used as flag in RX URB
 					   completion handler to change state
 					   and wake up sleeping process */
-  u_int32_t                size;  /* declared data size */
+  uint32_t                 size;  /* declared data size */
 } macusb_urb_container_t;
 
 /* !!! workqueue( WQ_HIGHPRI ) -- else priority inversion!!! */
@@ -271,9 +273,9 @@ static int
 pipe_init( macusb_bulk_pipe_t   *pipe,
 	   macusb_dev_t         *macdev,
 	   macusb_pipe_status_t *status,
-	   u_int32_t             urb_num,
-	   u_int32_t             buf_size,
-	   u_int32_t             is_sndbulkpipe )
+	   uint32_t              urb_num,
+	   uint32_t              buf_size,
+	   uint32_t              is_sndbulkpipe )
 {
   int i=0;
   macusb_urb_container_t *uc=NULL;
@@ -301,15 +303,15 @@ pipe_init( macusb_bulk_pipe_t   *pipe,
     }
     uc->urb->context = uc;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35)
-    buf = (u_int8_t *)usb_alloc_coherent( macdev->udev,
-					  buf_size,
-					  GFP_KERNEL,
-					  &dma_addr );
+    buf = (uint8_t *)usb_alloc_coherent( macdev->udev,
+					 buf_size,
+					 GFP_KERNEL,
+					 &dma_addr );
 #else
-    buf = (u_int8_t *)usb_buffer_alloc( macdev->udev,
-					buf_size,
-					GFP_KERNEL,
-					&dma_addr );
+    buf = (uint8_t *)usb_buffer_alloc( macdev->udev,
+				       buf_size,
+				       GFP_KERNEL,
+				       &dma_addr );
 #endif
     if ( !buf ){
       kfree( uc );
@@ -340,7 +342,7 @@ pipe_init( macusb_bulk_pipe_t   *pipe,
 
 static void
 pipe_fini_locked( macusb_bulk_pipe_t *pipe,
-		  u_int32_t           size )
+		  uint32_t            size )
 {
   macusb_urb_container_t *pos=NULL, *next=NULL;
   /* error while initializing device */
@@ -396,6 +398,12 @@ device_id( macusb_dev_t *macdev )
     rv = -ENODEV;
   }
   return rv;
+}
+
+static int
+device_product_id( macusb_dev_t *macdev )
+{
+  return macdev->udev->descriptor.idProduct;
 }
 
 static int
@@ -670,8 +678,8 @@ _device_rx( macusb_dev_t  *macdev,
 	    bin_idx = (bin_idx < MACUSB_URB_OCCUPANCY_HISTO_SIZE) ? bin_idx : MACUSB_URB_OCCUPANCY_HISTO_SIZE - 1;
 	    macdev->bulk_in.status->urb_occupancy[bin_idx]++;
 	    /* run MAC */
-	    //if ( (rx_bytes=(*rx_mac)( (u_int8_t *)uc->buf, MACUSB_RXBUFSIZE, macdev->async_cfg.mac_tout, &macdev->last_rq_buf )) ) {
-	    if ( (rx_bytes=(*rx_mac)( (u_int8_t *)uc->urb->transfer_buffer,
+	    //if ( (rx_bytes=(*rx_mac)( (uint8_t *)uc->buf, MACUSB_RXBUFSIZE, macdev->async_cfg.mac_tout, &macdev->last_rq_buf )) ) {
+	    if ( (rx_bytes=(*rx_mac)( (uint8_t *)uc->urb->transfer_buffer,
 				      MACUSB_RXBUFSIZE,
 				      macdev->last_rq_buf.rx_eot_offset,
 				      macdev->async_cfg.mac_tout,
@@ -738,15 +746,15 @@ _device_rx( macusb_dev_t  *macdev,
 }
 
 /* MAC for request with pointed length answer */
-static u_int32_t
-_rx_mac( volatile u_int8_t *rx_ptr,
-	 u_int32_t          rx_size,
-	 u_int32_t          rx_eot_offset,
-	 u_int32_t          usec,
-	 macusb_buffer_t   *last_rq_buf )
+static uint32_t
+_rx_mac( volatile uint8_t *rx_ptr,
+	 uint32_t          rx_size,
+	 uint32_t          rx_eot_offset,
+	 uint32_t          usec,
+	 macusb_buffer_t  *last_rq_buf )
 {
   volatile MACUSB_EOT_DATATYPE *eot=(MACUSB_EOT_DATATYPE *)(rx_ptr + rx_eot_offset);
-  u_int32_t counter=0;
+  uint32_t counter=0;
   while ( !*eot ) {
     if ( counter++ > usec )
       break;
@@ -761,20 +769,20 @@ _rx_mac( volatile u_int8_t *rx_ptr,
 }
 
 /* MAC for request with variable length answer: N 16-bit words */
-static u_int32_t
-_n16_rx_mac( volatile u_int8_t *rx_ptr,
-	     u_int32_t          rx_size,
-	     u_int32_t          rx_eot_offset,
-	     u_int32_t          usec,
-	     macusb_buffer_t   *last_rq_buf )
+static uint32_t
+_n16_rx_mac( volatile uint8_t *rx_ptr,
+	     uint32_t          rx_size,
+	     uint32_t          rx_eot_offset,
+	     uint32_t          usec,
+	     macusb_buffer_t  *last_rq_buf )
 {
   volatile MACUSB_EOT_DATATYPE *eot=&((macusb_rq_rx_prepacket_t *)rx_ptr)->eot;
-  u_int32_t counter=0;
-  u_int32_t data_len=0;
+  uint32_t counter=0;
+  uint32_t data_len=0;
   unsigned int i=0;
   union {
     macusb_rq_rx_prepacket_t bits;
-    u_int16_t                buf[sizeof(macusb_rq_rx_prepacket_t)/2];
+    uint16_t                 buf[sizeof(macusb_rq_rx_prepacket_t)/2];
   } prepacket;
 
   while ( !*eot ) {
@@ -790,13 +798,13 @@ _n16_rx_mac( volatile u_int8_t *rx_ptr,
      NB: bus controller is little-endian device, change conversion if not */
   //data_len = ((macusb_rq_rx_prepacket_t *)rx_ptr)->len;
   for ( i=0; i<sizeof(macusb_rq_rx_prepacket_t)/2; i++ )
-    prepacket.buf[i] = le16_to_cpu( *((u_int16_t *)(rx_ptr + i * 2)) );
+    prepacket.buf[i] = le16_to_cpu( *((uint16_t *)(rx_ptr + i * 2)) );
   data_len = prepacket.bits.len;
   /* too many data or incorrect packet */
-  if ( sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof(u_int16_t) + sizeof( MACUSB_EOT_DATATYPE ) > rx_size )
+  if ( sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof(uint16_t) + sizeof( MACUSB_EOT_DATATYPE ) > rx_size )
     return 0;
   rx_ptr += sizeof( macusb_rq_rx_prepacket_t );
-  eot = (u_int32_t *)(rx_ptr + sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof(u_int16_t));
+  eot = (uint32_t *)(rx_ptr + sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof(uint16_t));
   counter = 0;
   while ( !*eot ) {
     if ( counter++ > usec )
@@ -808,24 +816,24 @@ _n16_rx_mac( volatile u_int8_t *rx_ptr,
   if ( *eot != MACUSB_EOT )
     return 0;
   /* sizeof first packet + data length + sizeof end-of-transfer mark */
-  return sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof( u_int16_t ) + sizeof( MACUSB_EOT_DATATYPE );
+  return sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof( uint16_t ) + sizeof( MACUSB_EOT_DATATYPE );
 }
 
 /* MAC for request with variable length answer: N 32-bit words */
-static u_int32_t
-_n32_rx_mac( volatile u_int8_t *rx_ptr,
-	     u_int32_t          rx_size,
-	     u_int32_t          rx_eot_offset,
-	     u_int32_t          usec,
-	     macusb_buffer_t   *last_rq_buf )
+static uint32_t
+_n32_rx_mac( volatile uint8_t *rx_ptr,
+	     uint32_t          rx_size,
+	     uint32_t          rx_eot_offset,
+	     uint32_t          usec,
+	     macusb_buffer_t  *last_rq_buf )
 {
   volatile MACUSB_EOT_DATATYPE *eot=&((macusb_rq_rx_prepacket_t *)rx_ptr)->eot;
-  u_int32_t counter=0;
-  u_int32_t data_len=0;
+  uint32_t counter=0;
+  uint32_t data_len=0;
   unsigned int i=0;
   union {
     macusb_rq_rx_prepacket_t bits;
-    u_int16_t                buf[sizeof(macusb_rq_rx_prepacket_t)/2];
+    uint16_t                 buf[sizeof(macusb_rq_rx_prepacket_t)/2];
   } prepacket;
 
   while ( !*eot ) {
@@ -841,13 +849,13 @@ _n32_rx_mac( volatile u_int8_t *rx_ptr,
      NB: bus controller is little-endian device, change conversion if not */
   //data_len = ((macusb_rq_rx_prepacket_t *)rx_ptr)->len;
   for ( i=0; i<sizeof(macusb_rq_rx_prepacket_t)/2; i++ )
-    prepacket.buf[i] = le16_to_cpu( *((u_int16_t *)(rx_ptr + i * 2)) );
+    prepacket.buf[i] = le16_to_cpu( *((uint16_t *)(rx_ptr + i * 2)) );
   data_len = prepacket.bits.len;
   /* too many data or incorrect packet */
-  if ( sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof(u_int32_t) + sizeof( MACUSB_EOT_DATATYPE ) > rx_size )
+  if ( sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof(uint32_t) + sizeof( MACUSB_EOT_DATATYPE ) > rx_size )
     return 0;
   rx_ptr += sizeof( macusb_rq_rx_prepacket_t );
-  eot = (u_int32_t *)(rx_ptr + sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof(u_int32_t));
+  eot = (uint32_t *)(rx_ptr + sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof(uint32_t));
   counter = 0;
   while ( !*eot ) {
     if ( counter++ > usec )
@@ -859,20 +867,20 @@ _n32_rx_mac( volatile u_int8_t *rx_ptr,
   if ( *eot != MACUSB_EOT )
     return 0;
   /* sizeof first packet + data length + sizeof end-of-transfer mark */
-  return sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof( u_int32_t ) + sizeof( MACUSB_EOT_DATATYPE );
+  return sizeof( macusb_rq_rx_prepacket_t ) + data_len * sizeof( uint32_t ) + sizeof( MACUSB_EOT_DATATYPE );
 }
 
 /* MAC for request with echo answer */
-static u_int32_t
-_echo_rx_mac( volatile u_int8_t *rx_ptr,
-	      u_int32_t          rx_size,
-	      u_int32_t          rx_eot_offset,
-	      u_int32_t          usec,
-	      macusb_buffer_t   *last_rq_buf )
+static uint32_t
+_echo_rx_mac( volatile uint8_t *rx_ptr,
+	      uint32_t          rx_size,
+	      uint32_t          rx_eot_offset,
+	      uint32_t          usec,
+	      macusb_buffer_t  *last_rq_buf )
 {
-  volatile u_int8_t *eot=rx_ptr + last_rq_buf->tx_bytes - 1;
-  u_int32_t counter=0;
-  u_int8_t last_byte = *(last_rq_buf->tx_buf + last_rq_buf->tx_bytes - 1);
+  volatile uint8_t *eot=rx_ptr + last_rq_buf->tx_bytes - 1;
+  uint32_t counter=0;
+  uint8_t last_byte = *(last_rq_buf->tx_buf + last_rq_buf->tx_bytes - 1);
   while ( *eot != last_byte ) {
     if ( counter++ > usec )
       break;
@@ -1314,6 +1322,9 @@ macusb_ioctl( struct inode  *inode,
   case MACUSB_IOC_DEVICE_ID:
     retval = device_id( macdev );
     break;
+  case MACUSB_IOC_PRODUCT_ID:
+    retval = device_product_id( macdev );
+    break;
   case MACUSB_IOC_RESET_DEVICE:
     retval = device_reset( macdev );
     break;
@@ -1569,6 +1580,7 @@ macusb_probe( struct usb_interface       *interface,
   struct usb_endpoint_descriptor *endpoint;
   int i;
   int retval = -ENOMEM;
+  char *dev_str = NULL;
 
   /* allocate memory for our device state and initialize it */
   macdev = kmalloc( sizeof( *macdev ), GFP_KERNEL );
@@ -1645,10 +1657,21 @@ macusb_probe( struct usb_interface       *interface,
   spin_unlock( &macusb_lock );
 
   /* register the device */
+  if ( macdev->udev->descriptor.idProduct == MACUSB_PRODUCT_ID_LE99S ) {
+    dev_str = MACUSB_LE99S_STR;
+  } else if ( macdev->udev->descriptor.idProduct  == MACUSB_PRODUCT_ID_LE98 ) {
+    dev_str = MACUSB_LE98_STR;
+  } else if ( macdev->udev->descriptor.idProduct  == MACUSB_PRODUCT_ID_EM11 ) {
+    dev_str = MACUSB_EM11_STR;
+  } else {
+    printk( KERN_ERR "macusb: 0x%x: Unknown idProduct.", macdev->udev->descriptor.idProduct );
+    goto error;
+  }
   snprintf( macdev->name,
 	    MACUSB_NAME_MAX_SIZE,
-	    "%s%d-%%d",
+	    "%s_%s_%d-%%d",
 	    MACUSB_NODE_PREFIX,
+	    dev_str,
 	    macdev->udev->descriptor.bcdDevice );
   macusb_class.name = macdev->name;
   if ( (retval=usb_register_dev( interface, &macusb_class )) ) {
@@ -1658,8 +1681,9 @@ macusb_probe( struct usb_interface       *interface,
   }
   snprintf( macdev->bulk_in.name,
 	    MACUSB_NAME_MAX_SIZE,
-	    "%s_%s_bulk-in",
+	    "%s_%s_%s_bulk-in",
 	    MACUSB_NODE_PREFIX,
+	    dev_str,
 	    kobject_name( &interface->dev.kobj ) );
 
   if ( (retval=device_create_file( &interface->dev, &dev_attr_id )) ) {

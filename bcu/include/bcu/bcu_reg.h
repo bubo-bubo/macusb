@@ -1,7 +1,7 @@
 /*
  * Bus controller with USB interface (BCU)
  *
- * Copyright (C) 2014 Alexey Filin
+ * Copyright (C) 2014-2016 Alexey Filin
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License as
@@ -20,7 +20,9 @@
 #ifndef _BCU_REG_H_
 #define _BCU_REG_H_ 1
 
-#include <sys/types.h>
+#include <stdint.h>
+
+#include "macusb.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,30 +33,30 @@ typedef enum bcu_error {
 /* errors reported by bus controller */
   BCU_CTL_OK            = 0x0,    /* successful register operation */
   BCU_CTL_INIT_OK       = 0x10,   /* successful controller initialisation */
-  BCU_CTL_LEN_ERR       = 0x20,   /* wrong length of RX packet */
-  BCU_CTL_REG_ADDR_ERR  = 0x40,   /* wrong register address */
-  BCU_CTL_BUS_TOUT_ERR  = 0x80,   /* bus timeout */
+  BCU_CTL_ERR_LEN       = 0x20,   /* wrong length of RX packet */
+  BCU_CTL_ERR_REG_ADDR  = 0x40,   /* wrong register address */
+  BCU_CTL_ERR_BUS_TOUT  = 0x80,   /* bus timeout */
 
 /* encoding errors */
-  BCU_ENCODE_BUF_OVERRUN_ERR     = 0x100, /* TX buffer overrun */
-  BCU_ENCODE_BUF_NOT_EMPTY_ERR   = 0x200, /* TX buffer not empty */
-  BCU_ENCODE_NO_SUCH_COMMAND_ERR = 0x400, /* no such command */
+  BCU_ENC_ERR_BUF_OVERRUN     = 0x100, /* TX buffer overrun */
+  BCU_ENC_ERR_BUF_NOT_EMPTY   = 0x200, /* TX buffer not empty */
+  BCU_ENC_ERR_NO_SUCH_COMMAND = 0x400, /* no such command */
 
 /* decoding errors */
-  BCU_DECODE_DATA_LEN_ERR        = 0x10000,  /* wrong RX data length */
-  BCU_DECODE_FORMAT_ERR          = 0x20000,  /* format error */
-  BCU_DECODE_NO_SUCH_COMMAND_ERR = 0x40000,  /* no such command */
-  BCU_DECODE_NO_EOT_ERR          = 0x80000,  /* no end-of-transfer mark */
+  BCU_DEC_ERR_DATA_LEN        = 0x10000,  /* wrong RX data length */
+  BCU_DEC_ERR_FORMAT          = 0x20000,  /* format error */
+  BCU_DEC_ERR_NO_SUCH_COMMAND = 0x40000,  /* no such command */
+  BCU_DEC_ERR_NO_EOT          = 0x80000,  /* no end-of-transfer mark */
 } bcu_error_t;
 
 /* mask of bus controller errors */
-#define BCU_CTL_ERROR_MASK     0xFF
+#define BCU_CTL_ERR_MASK  0xFF
 
 /* mask of encoding errors */
-#define BCU_ENCODE_ERROR_MASK  (0xFF00)
+#define BCU_ENC_ERR_MASK  (0xFF00)
 
 /* mask of decoding errors */
-#define BCU_DECODE_ERROR_MASK  (0xFF0000)
+#define BCU_DEC_ERR_MASK  (0xFF0000)
 
 /*****************************************************************************/
 /* TX */
@@ -72,11 +74,11 @@ typedef enum bcu_error {
 
 /* TX header holds code of register operation */
 typedef struct bcu_tx_header {
-  u_int16_t reg_addr : 5; /* address of controller register */
-  u_int16_t reg_op1  : 1; /* reserved */
-  u_int16_t reg_op2  : 1; /* reserved */
-  u_int16_t reg_op3  : 1; /* type of operation with controller register */
-  u_int16_t init_ctl : 8; /* controller initialisation bits */
+  uint16_t reg_addr : 5; /* address of controller register */
+  uint16_t reg_op1  : 1; /* reserved */
+  uint16_t reg_op2  : 1; /* reserved */
+  uint16_t reg_op3  : 1; /* type of operation with controller register */
+  uint16_t init_ctl : 8; /* controller initialisation bits */
 } __attribute__ ((__packed__)) bcu_tx_header_t;
 
 /* convenience macros to fill TX packet header */
@@ -92,7 +94,7 @@ typedef struct bcu_tx_header {
 /* TX packet contains TX header and payload */
 typedef struct bcu_tx_packet {
   struct bcu_tx_header hdr;
-  u_int16_t            pld;
+  uint16_t            pld;
 } __attribute__ ((__packed__)) bcu_tx_packet_t;
 
 /* Macros to encode register operations into packets
@@ -139,7 +141,7 @@ typedef struct bcu_tx_packet {
       (_mbuf).tx_bytes += sizeof(bcu_tx_packet_t);			\
       (_mbuf).rx_eot_offset += sizeof(bcu_rx_packet_t);			\
     } else {								\
-      (_errors) = BCU_ENCODE_BUF_OVERRUN_ERR;				\
+      (_errors) = BCU_ENC_ERR_BUF_OVERRUN;				\
     }									\
   } while ( 0 )
 
@@ -156,7 +158,7 @@ typedef struct bcu_tx_packet {
       (_mbuf).tx_bytes += sizeof(bcu_tx_packet_t);			\
       (_mbuf).rx_eot_offset += sizeof(bcu_rx_packet_t);			\
     } else {								\
-      (_errors) = BCU_ENCODE_BUF_OVERRUN_ERR;				\
+      (_errors) = BCU_ENC_ERR_BUF_OVERRUN;				\
     }									\
   } while ( 0 )
 
@@ -172,7 +174,7 @@ typedef struct bcu_tx_packet {
       BCU_FILL_INIT_CTL_TX_PACKET( *((bcu_tx_packet_t *)((_mbuf).tx_buf + (_mbuf).tx_bytes)) ); \
       (_mbuf).tx_bytes += sizeof(bcu_tx_packet_t);			\
     } else {								\
-      (_errors) = BCU_ENCODE_BUF_OVERRUN_ERR;				\
+      (_errors) = BCU_ENC_ERR_BUF_OVERRUN;				\
     }									\
   } while ( 0 )
 
@@ -181,17 +183,17 @@ typedef struct bcu_tx_packet {
 
 /* RX header */
 typedef struct bcu_rx_header {
-  u_int16_t reg_addr : 5; /* address of controller register */
-  u_int16_t reg_op1  : 1; /* reserved */
-  u_int16_t reg_op2  : 1; /* reserved */
-  u_int16_t reg_op3  : 1; /* type of operation with controller register */
-  u_int16_t errors   : 8; /* register operation errors */
+  uint16_t reg_addr : 5; /* address of controller register */
+  uint16_t reg_op1  : 1; /* reserved */
+  uint16_t reg_op2  : 1; /* reserved */
+  uint16_t reg_op3  : 1; /* type of operation with controller register */
+  uint16_t errors   : 8; /* register operation errors */
 } __attribute__ ((__packed__)) bcu_rx_header_t;
 
 /* RX packet */
 typedef struct bcu_rx_packet {
   struct bcu_rx_header hdr;
-  u_int16_t            pld; /* payload */
+  uint16_t             pld; /* payload */
 } __attribute__ ((__packed__)) bcu_rx_packet_t;
 
 /* RX prepacket in variable length answer
@@ -201,10 +203,10 @@ typedef struct bcu_rx_packet {
        each other. The packet should match struct macusb_rq_rx_prepacket_t
        from macusb.h */
 typedef struct bcu_rx_prepacket {
-  u_int16_t ret_code;    /* command return code */
-  u_int16_t len   : 10;  /* length of second packet */
-  u_int16_t dummy : 6;   /* decoded by application layer */
-  u_int32_t eot;         /* end-of-transfer mark */
+  uint16_t ret_code;    /* command return code */
+  uint16_t len   : 10;  /* length of second packet */
+  uint16_t dummy : 6;   /* decoded by application layer */
+  uint32_t eot;         /* end-of-transfer mark */
 } __attribute__ ((__packed__)) bcu_rx_prepacket_t;
 
 /* Macro to decode controller register operation
@@ -234,13 +236,13 @@ typedef struct bcu_rx_prepacket {
 	  (_data) = ((bcu_rx_packet_t *)((_mbuf).rx_buf+(_offset)))->pld; \
 	  (_offset) += sizeof(bcu_rx_packet_t);				\
 	} else {							\
-	  (_errors) |= BCU_DECODE_FORMAT_ERR;				\
+	  (_errors) |= BCU_DEC_ERR_FORMAT;				\
 	}								\
       } else {								\
-	(_errors) |= BCU_DECODE_FORMAT_ERR;				\
+	(_errors) |= BCU_DEC_ERR_FORMAT;				\
       }									\
     } else {								\
-      (_errors) |= BCU_DECODE_DATA_LEN_ERR;				\
+      (_errors) |= BCU_DEC_ERR_DATA_LEN;				\
     }									\
   } while ( 0 )
 

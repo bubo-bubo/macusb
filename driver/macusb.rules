@@ -1,0 +1,8 @@
+# old udev rule (NAME: Match the name of the node or network interface)
+#DRIVERS=="macusb", MODE="0666", NAME="macusb/%k"
+
+# new udev rule (NAME: Match the name of a network interface)
+#DRIVERS=="macusb", MODE="0666", SYMLINK="macusb/%k"
+
+# compatible udev rule (node in devfs root)
+DRIVERS=="macusb", MODE="0666"

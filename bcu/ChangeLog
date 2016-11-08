@@ -1,3 +1,9 @@
+2016-06-07  Alexey Filin
+
+	* supported controllers: LE99S (SUMMA), LE98 (MISS), EM11 (EuroMISS)
+
+	Version 1.2.1
+
 2014-11-06  Alexey Filin
 
 	* Add into `_exec_buf' conversion of TX data into local buffer and

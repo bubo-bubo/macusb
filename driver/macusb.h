@@ -1,7 +1,7 @@
 /*
  * MAC USB driver
  *
- * Copyright (C) 2014 Alexey Filin
+ * Copyright (C) 2014-2015 Alexey Filin
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License as
@@ -37,7 +37,14 @@
  * The driver implements access to a MAC USB device with character
  * special file from devfs (device node). Each device attached to USB
  * and enumerated is assigned with a unique device node name. The name matches
- * pattern /dev/macusbN-X, where N and X are natural numbers.
+ * pattern /dev/macusb_TYPE_N-X, where:
+ * 
+ *   o TYPE is a device type, string defined by idProduct in the device default
+ *     descriptor. All supported idProduct's are define'd as
+ *     MACUSB_PRODUCT_ID_TYPE. Appropriate types are define'd as
+ *     MACUSB_TYPE_STR below,
+ *   o N is bcdDevice in the device default descriptor (unsigned integer),
+ *   o X is a unique number being set by kernel (unsigned integer).
  *
  * At any moment device node state is set to one of five states:
  *
@@ -65,7 +72,7 @@
  *
  * Example of asynchronous request:
  *
- *   const char *path = "/dev/macusb/macusb1-0";
+ *   const char *path = "/dev/macusb/macusb_le98_1-0";
  *   fd = open( path )
  *   if ( ioctl( fd, MACUSB_IOC_RQ_EOT, &cmd_buffer ) )
  *     perror( path );
@@ -73,7 +80,7 @@
  *
  * Example of synchronous request:
  *
- *   const char *path = "/dev/macusb/macusb1-0";
+ *   const char *path = "/dev/macusb/macusb_le98_1-0";
  *   fd = open( path )
  *   // send commands
  *   if ( (bytes=write( fd, &out_buffer, count )) < 0 )
@@ -98,7 +105,7 @@
  *     completion handler doesn't change RX data of MAC'ed RX URBs.
  *     It is up to user to reset device or not somehow.
  *
- * NB4:  ioctl arg is of type u_int64_t to make cmd name invariant by
+ * NB4:  ioctl arg is of type uint64_t to make cmd name invariant by
  *       32/64-bit process context
  *
  * NB5: pointers in interface structures should have 64-bit width by the same
@@ -113,18 +120,28 @@ extern "C" {
 
 /* Device dependent */
 #define MACUSB_VENDOR_ID               0x04b4
+
 /* #define MACUSB_PRODUCT_ID              0x1002 default */
-#define MACUSB_PRODUCT_ID              0x3302
+/* supported idProduct in device default descriptor */
+#define MACUSB_PRODUCT_ID_LE99S        0x3301
+#define MACUSB_PRODUCT_ID_LE98         0x3302
+#define MACUSB_PRODUCT_ID_EM11         0x3303
+
+/* driver-specific prefix */
+#define MACUSB_NODE_PREFIX             "macusb"
+
+/* device type string */
+#define MACUSB_LE99S_STR               "le99s"
+#define MACUSB_LE98_STR                "le98"
+#define MACUSB_EM11_STR                "em11"
 
 /* Get a minor range for your devices from the usb maintainer */
 #define MACUSB_MINOR_BASE              192
 
-#define MACUSB_NODE_PREFIX             "macusb"
-
 #define MACUSB_IOC_MAGIC               'x'
 
-#define MACUSB_VERSION_CODE            0x010002
-#define MACUSB_VERSION_STR             "1.0.2"
+#define MACUSB_VERSION_CODE            0x010202
+#define MACUSB_VERSION_STR             "1.2.2"
 #define MACUSB_VERSION(a,b,c)          (((a) << 16) + ((b) << 8) + (c))
 
 /* Size of buffer to transmit data from.
@@ -196,29 +213,29 @@ extern "C" {
 /* request buffer */
 typedef struct macusb_buffer
 {
-  u_int8_t   tx_buf[MACUSB_TXBUFSIZE]; /* buffer to transmit data from (TX) */
-  u_int32_t  tx_bytes;      /* number of bytes to send */
-  u_int8_t   rx_buf[MACUSB_RXBUFSIZE]; /* buffer to receive data into (RX) */
-  u_int32_t  rx_bytes;      /* number of received bytes */
-  u_int32_t  rx_eot_offset; /* offset of end-of-transfer mark in RX buffer.
+  uint8_t   tx_buf[MACUSB_TXBUFSIZE]; /* buffer to transmit data from (TX) */
+  uint32_t  tx_bytes;      /* number of bytes to send */
+  uint8_t   rx_buf[MACUSB_RXBUFSIZE]; /* buffer to receive data into (RX) */
+  uint32_t  rx_bytes;      /* number of received bytes */
+  uint32_t  rx_eot_offset; /* offset of end-of-transfer mark in RX buffer.
 			       Used by ioctl(MACUSB_IOC_RQ_EOT) */
-  int32_t    rx_urbstatus;  /* RX URB status in completion handler */
-  u_int32_t  state;         /* device node state after ioctl command execution */
+  int32_t   rx_urbstatus;  /* RX URB status in completion handler */
+  uint32_t  state;         /* device node state after ioctl command execution */
 } __attribute__ ((__packed__)) macusb_buffer_t;
 
 /* configuration parameters for synchronous transfers */
 typedef struct macusb_sync_cfg
 {
-  u_int32_t tx_tout;       /* TX timeout in milliseconds */
-  u_int32_t rx_tout;       /* RX timeout in milliseconds */
+  uint32_t tx_tout;       /* TX timeout in milliseconds */
+  uint32_t rx_tout;       /* RX timeout in milliseconds */
 } __attribute__ ((__packed__)) macusb_sync_cfg_t;
 
 /* configuration parameters for asynchronous transfers */
 typedef struct macusb_async_cfg
 {
-  u_int32_t urb_num;       /* number of reserved TX/RX URBs */
-  u_int32_t mac_tout;      /* MAC timeout in microseconds */
-  u_int32_t urb_tout;      /* timeout of URB completion handlers in milliseconds */
+  uint32_t urb_num;       /* number of reserved TX/RX URBs */
+  uint32_t mac_tout;      /* MAC timeout in microseconds */
+  uint32_t urb_tout;      /* timeout of URB completion handlers in milliseconds */
 } __attribute__ ((__packed__)) macusb_async_cfg_t;
 
 /* device node states */
@@ -245,21 +262,21 @@ typedef enum {
 
    NB: updated for asynchronous requests only */
 typedef struct macusb_pipe_status {
-  u_int64_t bytes;              /* overall number of transferred bytes */
-  u_int64_t mac_tout_urbs;      /* overall number of URBs with MAC timeout */
-  u_int64_t completed_urbs;     /* overall number of completed URBs */
-  u_int64_t size_mismatch_urbs; /* overall number of broken URBs (size
+  uint64_t bytes;              /* overall number of transferred bytes */
+  uint64_t mac_tout_urbs;      /* overall number of URBs with MAC timeout */
+  uint64_t completed_urbs;     /* overall number of completed URBs */
+  uint64_t size_mismatch_urbs; /* overall number of broken URBs (size
 				   mismatch in completion handler) */
-  u_int64_t bad_status_urbs;    /* overall number of failed URBs (non-zero
+  uint64_t bad_status_urbs;    /* overall number of failed URBs (non-zero
 				   status in completion handler) */
-  u_int64_t urb_occupancy[MACUSB_URB_OCCUPANCY_HISTO_SIZE]; /* URB occupancy histogram */
-  u_int32_t busy_urbs;          /* number of URBs in use */
+  uint64_t urb_occupancy[MACUSB_URB_OCCUPANCY_HISTO_SIZE]; /* URB occupancy histogram */
+  uint32_t busy_urbs;          /* number of URBs in use */
 } __attribute__ ((__packed__)) macusb_pipe_status_t;
 
 /* device status info */
 typedef struct macusb_status
 {
-  u_int32_t                 state;     /* device node state */
+  uint32_t                  state;     /* device node state */
   int32_t                   err;       /* number of last error */
   struct macusb_pipe_status bulk_out;  /* bulk-out status */
   struct macusb_pipe_status bulk_in;   /* bulk-in status */
@@ -269,14 +286,14 @@ typedef struct macusb_status
 /* RX */
 
 /* end-of-transfer mark, tail of 4 bytes length */
-#define MACUSB_EOT_DATATYPE  u_int32_t
+#define MACUSB_EOT_DATATYPE  uint32_t
 #define MACUSB_EOT           0xFFFFFFFF
 
 /*  RX rq header in variable length answer */
 typedef struct macusb_rq_rx_prepacket {
-  u_int16_t           dummy1;      /* decoded by application layer */
-  u_int16_t           len    : 10; /* length of second packet */
-  u_int16_t           dummy2 : 6;  /* decoded by application layer */
+  uint16_t           dummy1;      /* decoded by application layer */
+  uint16_t           len    : 10; /* length of second packet */
+  uint16_t           dummy2 : 6;  /* decoded by application layer */
   MACUSB_EOT_DATATYPE eot;         /* end-of-transfer mark */
 } __attribute__ ((__packed__)) macusb_rq_rx_prepacket_t;
 
@@ -290,23 +307,26 @@ typedef struct macusb_rq_rx_prepacket {
 /* get USB Device ID */
 #define MACUSB_IOC_DEVICE_ID      _IO(MACUSB_IOC_MAGIC, 0)
 
+/* get USB Product ID */
+#define MACUSB_IOC_PRODUCT_ID     _IO(MACUSB_IOC_MAGIC, 1)
+
 /* reset USB device, usb_reset_device(9):
       "Warns all drivers bound to registered interfaces (using their pre_reset
        method), performs the port reset, and then lets the drivers know that
        the reset is over (using their post_reset method)."
 
    NB: dangerous, kills all operations with device */
-#define MACUSB_IOC_RESET_DEVICE   _IO(MACUSB_IOC_MAGIC, 1)
+#define MACUSB_IOC_RESET_DEVICE   _IO(MACUSB_IOC_MAGIC, 2)
 
 /* reset bus controller
 
    NB: dangerous, kills all operations with device */
-#define MACUSB_IOC_RESET_CTL      _IO(MACUSB_IOC_MAGIC, 2)
+#define MACUSB_IOC_RESET_CTL      _IO(MACUSB_IOC_MAGIC, 3)
 
 /* Clear states, counters, buffers.
 
    NB: State should be MACUSB_STATE_FREE or MACUSB_STATE_ERR */
-#define MACUSB_IOC_CLEAR          _IO(MACUSB_IOC_MAGIC, 3)
+#define MACUSB_IOC_CLEAR          _IO(MACUSB_IOC_MAGIC, 4)
 
 /* Get status of device node.
    status.state -- device state, see description of device node states for
@@ -315,66 +335,66 @@ typedef struct macusb_rq_rx_prepacket {
    status.bulk_out/in -- status for TX/RX pipes respectively. See description of
      'macusb_pipe_status_t' for more info.
    arg type: (macusb_status_t *) */
-#define MACUSB_IOC_STATUS         _IOR(MACUSB_IOC_MAGIC, 4, u_int64_t)
+#define MACUSB_IOC_STATUS         _IOR(MACUSB_IOC_MAGIC, 5, uint64_t)
 
 /* Stop synchronous/asynchronous request in progress.
    arg type: (macusb_status_t *) is set for success
    errno is set to EINTR if syscall was interrupted by a signal
    errno is set to EFAULT if syscall failed to copy state */
-#define MACUSB_IOC_STOP_RQ        _IOR(MACUSB_IOC_MAGIC, 5, u_int64_t)
+#define MACUSB_IOC_STOP_RQ        _IOR(MACUSB_IOC_MAGIC, 6, uint64_t)
 
 /* Copy data buffer of the last synchronous/asynchronous request.
    arg type: (macusb_buffer_t *) */
-#define MACUSB_IOC_COPY_RQ        _IOR(MACUSB_IOC_MAGIC, 6, u_int64_t)
+#define MACUSB_IOC_COPY_RQ        _IOR(MACUSB_IOC_MAGIC, 7, uint64_t)
 
 /*****************************************************************************/
 
 /* Get sync transfer parameters
    arg type: (macusb_sync_cfg_t *) */
-#define MACUSB_IOC_GET_SYNC_CFG   _IOR(MACUSB_IOC_MAGIC, 7, u_int64_t)
+#define MACUSB_IOC_GET_SYNC_CFG   _IOR(MACUSB_IOC_MAGIC, 8, uint64_t)
 
 /* Set sync transfer parameters. Size of transfer buffer should be:
      < MACUSB_BULK_IN_MAX_BUF_SIZE
      > wMaxPacketSize,
      size % wMaxPacketSize = 0
    arg type: (macusb_sync_cfg_t *) */
-#define MACUSB_IOC_SET_SYNC_CFG   _IOW(MACUSB_IOC_MAGIC, 8, u_int64_t)
+#define MACUSB_IOC_SET_SYNC_CFG   _IOW(MACUSB_IOC_MAGIC, 9, uint64_t)
 
 /*****************************************************************************/
 
 /* Get async transfer parameters
    arg type: (macusb_async_cfg_t *) */
-#define MACUSB_IOC_GET_ASYNC_CFG  _IOR(MACUSB_IOC_MAGIC, 9, u_int64_t)
+#define MACUSB_IOC_GET_ASYNC_CFG  _IOR(MACUSB_IOC_MAGIC, 10, uint64_t)
 
 /* Set async transfer parameters. Size of transfer buffer should be:
      < MACUSB_BULK_IN_MAX_BUF_SIZE
      > wMaxPacketSize,
      size % wMaxPacketSize = 0
      arg type: (macusb_async_cfg_t *) */
-#define MACUSB_IOC_SET_ASYNC_CFG  _IOW(MACUSB_IOC_MAGIC, 10, u_int64_t)
+#define MACUSB_IOC_SET_ASYNC_CFG  _IOW(MACUSB_IOC_MAGIC, 11, uint64_t)
 
 /* Execute asynchronous request with pointed length answer
    arg type: (macusb_buffer_t *) */
-#define MACUSB_IOC_RQ_EOT         _IOWR(MACUSB_IOC_MAGIC, 11, u_int64_t)
+#define MACUSB_IOC_RQ_EOT         _IOWR(MACUSB_IOC_MAGIC, 12, uint64_t)
 
 /* Execute asynchronous request with variable length answer: N 16-bit words (SNR)
    arg type: (macusb_buffer_t *) */
-#define MACUSB_IOC_RQ_N16         _IOWR(MACUSB_IOC_MAGIC, 12, u_int64_t)
+#define MACUSB_IOC_RQ_N16         _IOWR(MACUSB_IOC_MAGIC, 13, uint64_t)
 
 /* Execute asynchronous request with variable length answer: N 32-bit words (SDR)
    arg type: (macusb_buffer_t *) */
-#define MACUSB_IOC_RQ_N32         _IOWR(MACUSB_IOC_MAGIC, 13, u_int64_t)
+#define MACUSB_IOC_RQ_N32         _IOWR(MACUSB_IOC_MAGIC, 14, uint64_t)
 
 /* Execute asynchronous request with echo answer. Command is used to debug test
    firmware. Should not be used with full-fledged firmware.
    arg type: (macusb_buffer_t *)
 
    NB: Echo RX end-of-transfer mark is taken as the last byte of TX buffer */
-#define MACUSB_IOC_RQ_ECHO        _IOWR(MACUSB_IOC_MAGIC, 14, u_int64_t)
+#define MACUSB_IOC_RQ_ECHO        _IOWR(MACUSB_IOC_MAGIC, 15, uint64_t)
 
 /*****************************************************************************/
 
-#define MACUSB_IOC_MAXNR         15
+#define MACUSB_IOC_MAXNR         16
 
 #ifdef __cplusplus
 }

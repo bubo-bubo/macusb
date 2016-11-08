@@ -13,8 +13,6 @@
 
 #define NAME_BUFF_SIZE 256
 
-#define DEV_DIR "/dev"
-
 int cmd = 0;
 char *opt_str_arg = NULL;
 macusb_sync_cfg_t scfg={ 0, 0 };
@@ -57,7 +55,7 @@ process_options( int argc, const char* argv[] )
   int num=0;
 
   struct poptOption optionsTable[] = {
-    { "node", 'n', POPT_ARG_STRING, &opt_str_arg, 'n', "set node name", "NAME" },
+    { "path", 'p', POPT_ARG_STRING, &opt_str_arg, 'p', "set node path", "PATH" },
     { "sync-cfg", '1', POPT_ARG_STRING | POPT_ARGFLAG_OPTIONAL, &opt_str_arg, '1', "get/set configuration for synchronous mode", "[TXTOUT:RXTOUT]" },
     { "async-cfg", '2', POPT_ARG_STRING | POPT_ARGFLAG_OPTIONAL, &opt_str_arg, '2', "get/set configuration for asynchronous mode", "[URBNUM:MACTOUT:URBTOUT]" },
     { "status", 's', 0, 0, 's', "get device node status", 0 },
@@ -71,14 +69,14 @@ process_options( int argc, const char* argv[] )
     { NULL, 0, 0, NULL, 0 }
   };
 
-  snprintf( macusb_node_path, NAME_BUFF_SIZE, DEV_DIR"/macusb9-0" );
+  snprintf( macusb_node_path, NAME_BUFF_SIZE, "/dev/macusb_le98_9-0" );
 
   optCon = poptGetContext( NULL, argc, argv, optionsTable, 0 );
 
   while ( (c = poptGetNextOpt( optCon )) >= 0 ) {
     switch ( c ) {
-    case 'n':
-      snprintf( macusb_node_path, NAME_BUFF_SIZE, DEV_DIR"/%s", opt_str_arg );
+    case 'p':
+      snprintf( macusb_node_path, NAME_BUFF_SIZE, "%s", opt_str_arg );
       break;
     case '1':
       if ( !opt_str_arg ) {
@@ -190,7 +188,6 @@ main( int argc, const char* argv[] )
 {
   int fd=-1, rv=0;
   macusb_status_t st;
-  snprintf( macusb_node_path, NAME_BUFF_SIZE, DEV_DIR"/mac9-0" );
   errno=0;
 
   if ( (rv=process_options( argc, argv )) )
@@ -209,12 +206,12 @@ main( int argc, const char* argv[] )
     if ( (rv=ioctl( fd, cmd, &scfg )) ) {
       perror("MACUSB_IOC_GET_SYNC_CFG");
     } else {
-      printf( "GET_SYNC_CFG:\n tx_tout=%u,\n rx_tout=%u\n",
+      printf( "GET_SYNC_CFG:\n tx_tout=%u\n rx_tout=%u\n",
 	      scfg.tx_tout, scfg.rx_tout );
     }
     break;
   case MACUSB_IOC_SET_SYNC_CFG:
-    printf( "SET_SYNC_CFG:\n tx_tout=%u,\n rx_tout=%u\n",
+    printf( "SET_SYNC_CFG:\n tx_tout=%u\n rx_tout=%u\n",
 	    scfg.tx_tout, scfg.rx_tout );
     if ( (rv=ioctl( fd, cmd, &scfg )) ) {
       perror("MACUSB_IOC_SET_SYNC_CFG");
@@ -224,12 +221,12 @@ main( int argc, const char* argv[] )
     if ( (rv=ioctl( fd, cmd, &acfg )) ) {
       perror("MACUSB_IOC_GET_ASYNC_CFG");
     } else {
-      printf( "GET_ASYNC_CFG:\n urb_num=%u,\n mac_tout=%u,\n urb_tout=%u\n",
+      printf( "GET_ASYNC_CFG:\n urb_num=%u\n mac_tout=%u\n urb_tout=%u\n",
 	      acfg.urb_num, acfg.mac_tout, acfg.urb_tout );
     }
     break;
   case MACUSB_IOC_SET_ASYNC_CFG:
-    printf( "SET_ASYNC_CFG:\n urb_num=%u,\n mac_tout=%u,\n urb_tout=%u\n",
+    printf( "SET_ASYNC_CFG:\n urb_num=%u\n mac_tout=%u\n urb_tout=%u\n",
 	    acfg.urb_num, acfg.mac_tout, acfg.urb_tout );
     if ((rv=ioctl( fd, cmd, &acfg )) ) {
       perror("MACUSB_IOC_SET_ASYNC_CFG");
